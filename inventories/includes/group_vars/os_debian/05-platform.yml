@@ -1,0 +1,73 @@
+---
+
+ansible_python_interpreter: '/usr/bin/python3'
+
+# cannot use the same var as both lvalue and rvalue in lazy evaluation,
+# so create an intermediate data struct
+__platform_sysconfdir:        "/etc"
+__platform_rundir:            "/run"
+__platform_prefix:            "/usr/local"
+__platform_exec_prefix:       "{{ __platform_prefix }}"
+__platform_libdir_name:       "lib"
+__platform_localstatedir:     "/var"
+__platform_runstatedir:       "/run"
+__platform_datarootdir:       "{{ __platform_prefix }}/share"
+
+__platform_profile_d:         "{{ __platform_sysconfdir }}/profile.d"
+
+__platform_apt_confdir:       "{{ __platform_sysconfdir }}/apt"
+
+
+platform:
+  name:                       "debian"
+  unix:                       true
+  linux:                      true
+  gnu:                        true
+
+  admin_user:                 "root"
+  admin_group:                "root"
+
+  # Debian details
+  logdir_group:               "adm"
+
+  pwhash_type:                "sha512"
+  pwhash_nologin:             "*"
+  pwhash_seed:                "{{ 65534 | random(seed=inventory_hostname) | string }}"
+
+
+  # https://www.gnu.org/prep/standards/html_node/Directory-Variables.html
+  fs:
+    prefix:                   "{{ __platform_prefix }}"
+    exec_prefix:              "{{ __platform_exec_prefix }}"
+    bindir:                   "{{ __platform_exec_prefix }}/bin"
+    sbindir:                  "{{ __platform_exec_prefix }}/sbin"
+    libexecdir:               "{{ __platform_exec_prefix }}/libexec"
+    datarootdir:              "{{ __platform_datarootdir }}"
+    datadir:                  "{{ __platform_datarootdir }}"
+    sysconfdir:               "{{ __platform_sysconfdir }}"
+    localstatedir:            "{{ __platform_localstatedir }}"
+    runstatedir:              "{{ __platform_runstatedir }}"
+    libdir:                   "{{ __platform_exec_prefix }}/{{ __platform_libdir_name }}"
+    mandir:                   "{{ __platform_prefix }}/man"
+
+    # non-GNU
+    libdir_name:              "{{ __platform_libdir_name }}"
+    rundir:                   "{{ __platform_rundir }}"
+    lockdir:                  "{{ __platform_rundir }}/lock"
+    sharedir:                 "{{ __platform_prefix }}/share"
+    home_nologin:             "{{ __platform_localstatedir }}/local/empty"
+    profile_d:                "{{ __platform_profile_d }}"
+    proxy_env_file:           "{{ __platform_profile_d }}/proxy.sh"
+    var_lib:                  "{{ __platform_localstatedir }}/lib"
+    logdir:                   "{{ __platform_localstatedir }}/log"
+
+    # OS-specific
+    initd:                    "{{ __platform_sysconfdir }}/init.d"
+    apt_confdir:              "{{ __platform_apt_confdir }}"
+    apt_confd:                "{{ __platform_apt_confdir }}/apt.conf.d"
+    apt_sources_list:         "{{ __platform_apt_confdir }}/sources.list"
+    apt_sources_confdir:      "{{ __platform_apt_confdir }}/sources.list.d"
+    apt_gpg_keydir:           "{{ __platform_apt_confdir }}/trusted.gpg.d"
+    apt_gpg_extra_keydir:     "{{ __platform_apt_confdir }}/local.trusted.gpg.d"
+    
+...

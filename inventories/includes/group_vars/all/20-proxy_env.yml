@@ -1,0 +1,23 @@
+---
+# NOTE: brackets are not used for IPv6 addresses in NO_PROXY
+# (see https://github.com/curl/curl/issues/2353)
+# Is that true for all supporting software?
+web_no_proxy: "localhost,127.0.0.1,::1"
+
+# environment vars for direct communication,
+# e.g. for API calls, ...
+env_no_proxy:
+  "http_proxy":  ""
+  "https_proxy": ""
+  "ftp_proxy":   ""
+  "no_proxy" :   ""
+  "HTTP_PROXY":  ""
+  "HTTPS_PROXY": ""
+  "FTP_PROXY":   ""
+  "NO_PROXY" :   ""
+
+# default environment vars (using a proxy if necessary)
+# Defaults to no-proxy, but may be overridden by subsequent vars files.
+env_web_proxy: "{{ env_no_proxy }}"
+
+...

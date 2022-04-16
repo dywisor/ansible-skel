@@ -1,0 +1,33 @@
+---
+# Defines environment vars for using a web proxy
+# passed via SSH reverse forwarding.
+#
+# 20-proxy_env.yml must be included prior to this file.
+#
+# The reverse tunnel should open a socket on 127.0.0.1:3128
+# that connects to the actual web proxy.
+# This can be done in ansible by configuring ansible_ssh_extra_args:
+#ansible_ssh_extra_args: "-R3128:REAL_PROXY_IP:REAL_PROXY_PORT"
+#
+# The control node must be able to access the web proxy.
+#
+
+web_proxy_ssh_port: 3128
+web_proxy_ssh_host: '127.0.0.1'
+web_proxy_ssh: "http://{{ web_proxy_ssh_host }}:{{ web_proxy_ssh_port }}"
+
+env_web_proxy_ssh:
+  http_proxy:   "{{ web_proxy_ssh }}"
+  https_proxy:  "{{ web_proxy_ssh }}"
+  ftp_proxy:    "{{ web_proxy_ssh }}"
+  no_proxy:     "{{ web_no_proxy }}"
+  HTTP_PROXY:   "{{ web_proxy_ssh }}"
+  HTTPS_PROXY:  "{{ web_proxy_ssh }}"
+  FTP_PROXY:    "{{ web_proxy_ssh }}"
+  NO_PROXY:     "{{ web_no_proxy }}"
+
+# export env_web_proxy_ssh as default web_proxy_env,
+# overriding any previous definition
+env_web_proxy: "{{ env_web_proxy_ssh }}"
+
+...

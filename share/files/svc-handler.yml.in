@@ -1,0 +1,63 @@
+---
+
+- name: Start @@NAME@@
+  listen:
+    - svc-start-@@SVC_NAME@@
+  become: true
+  become_user: "{{ platform.admin_user }}"
+  service:
+    name: "{{ @@SVC_NAME@@_service_name }}"
+    state: started
+  when: "os_can_handle_service"
+
+- name: Stop @@NAME@@
+  listen:
+    - svc-stop-@@SVC_NAME@@
+  become: true
+  become_user: "{{ platform.admin_user }}"
+  service:
+    name: "{{ @@SVC_NAME@@_service_name }}"
+    state: stopped
+  when: "os_can_handle_service"
+
+- name: Restart @@NAME@@
+  listen:
+    - svc-restart-@@SVC_NAME@@
+  become: true
+  become_user: "{{ platform.admin_user }}"
+  service:
+    name: "{{ @@SVC_NAME@@_service_name }}"
+    state: restarted
+  when: "os_can_handle_service"
+
+- name: Reload @@NAME@@
+  listen:
+    - svc-reload-@@SVC_NAME@@
+  become: true
+  become_user: "{{ platform.admin_user }}"
+  service:
+    name: "{{ @@SVC_NAME@@_service_name }}"
+    state: reloaded
+  when: "os_can_handle_service"
+
+- name: Enable @@NAME@@
+  listen:
+    - svc-enable-@@SVC_NAME@@
+  become: true
+  become_user: "{{ platform.admin_user }}"
+  service:
+    name: "{{ @@SVC_NAME@@_service_name }}"
+    enabled: true
+  when: "os_can_handle_service"
+
+- name: Disable @@NAME@@
+  listen:
+    - svc-disable-@@SVC_NAME@@
+  become: true
+  become_user: "{{ platform.admin_user }}"
+  service:
+    name: "{{ @@SVC_NAME@@_service_name }}"
+    enabled: true
+  when: "os_can_handle_service"
+
+...

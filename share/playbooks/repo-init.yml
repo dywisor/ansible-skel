@@ -1,0 +1,46 @@
+---
+
+- name: (Re-)Initialize Ansible Project Root
+  tags: always
+  hosts: localhost
+  connection: local
+  vars:
+    AENV_SKEL_PRJROOT: "{{ lookup('env', 'AENV_SKEL_PRJROOT') }}"
+
+  tasks:
+    - name: create project root
+      file:
+        state: directory
+        dest:  "{{ prjroot }}"
+        mode:  "0755"
+
+    - name: create directories in project root
+      file:
+        state: directory
+        dest:  "{{ prjroot }}/{{ item.path }}"
+        mode:  "{{ item.mode | default('0755') }}"
+      loop:
+        - path: bin
+        - path: includes
+        - path: local
+        - path: roles
+
+    - name: copy over gitignore if missing
+      copy:
+        src:  "{{ AENV_SKEL_PRJROOT }}/.gitignore"
+        dest: "{{ prjroot }}/.gitignore"
+        force: false
+
+    # alternatively, get list of wrappers and symlink within ansible..
+    - name: install exec wrappers in project root
+      command:
+        argv:
+          - "{{ AENV_SKEL_PRJROOT }}/bin/wrapper.py"
+          - "-i"
+          - "{{ prjroot }}/bin"
+      register: ret_wrapper_install
+      changed_when: >
+        (ret_wrapper_install.stdout | length) > 0
+        
+
+...

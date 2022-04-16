@@ -1,0 +1,161 @@
+#!/usr/bin/awk -f
+BEGIN {
+    names_count = 0;
+    type_desc   = "";
+    flag_desc   = "";
+
+    pwfile_dir  = "ctrl_local_passwd";
+}
+
+{ todo = 1; descriptor = ""; }
+
+# desc: <name>   [ignored]
+# type: <name>
+# flag: <name>
+
+( ($1 == "#") && ($2 ~ "^[a-z]+:$") ) {
+    descriptor = substr ( $2, 1, length ( $2 ) - 1 );
+}
+
+( descriptor == "desc" ) { todo = 0; }
+( descriptor == "note" ) { todo = 0; }
+( descriptor == "type" ) { type_desc = $3; todo = 0; }
+( descriptor == "flag" ) { flag_desc = $3; todo = 0; }
+
+( (todo) && (descriptor) ) { exit 99; }
+
+
+# _<varname>: <value>  (space after colon is required)
+# COULD warn when name gets redefined
+( (todo) && ($1 ~ "^_[a-zA-Z][a-zA-Z0-9_]*:$") ) {
+    name                 = substr ( $1, 2, length ( $1 ) - 2 );
+
+    names[++names_count] = name;
+    type_map[name]       = type_desc;
+    flag_map[name]       = flag_desc;
+
+    type_desc            = "";
+    flag_desc            = "";
+    todo                 = 0;
+}
+
+END {
+    printf ( "---\n" );
+    if ( names_count ) {
+        printf ( "\n" );
+        printf ( "- name: set default variables\n" );
+        printf ( "  become: false\n" );
+        printf ( "  connection: local\n" );
+        printf ( "  run_once: true\n" );
+        printf ( "  block:\n" );
+       
+        for ( i = 1; i <= names_count; i++ ) {
+            if ( i > 1 ) { printf ( "\n" ); };
+            name      = names[i];
+            type_desc = type_map[name];
+            flag_desc = flag_map[name];
+            when_type = "";
+
+            printf ( "    - name: set default - %s\n", name );
+            printf ( "      set_fact:\n" );
+
+            # type_desc
+            # --------------------------------------------------
+
+            # no type specified, str or non-scalar type (list, dict) - use as-is
+            if ( \
+                (type_desc == "") \
+                || (type_desc == "str") \
+                || (type_desc == "list") \
+                || (type_desc == "dict") \
+                || (type_desc == "complex") \
+            ) {
+                printf ( "        %s: \"{{ _%s }}\"\n", name, name );
+
+            # dict-merge: combine with self, defaulting to empty dict
+            } else if ( type_desc == "dict-merge" ) {
+                printf ( "        %s: \"{{ _%s | combine(%s | default({})) }}\"\n", name, name, name );
+                when_type = "always";
+
+            # bool: force-convert
+            } else if ( type_desc == "bool" ) {
+                printf ( "        %s: \"{{ _%s | bool }}\"\n", name, name );
+
+            # int: force-convert
+            } else if ( type_desc == "int" ) {
+                printf ( "        %s: \"{{ _%s | int }}\"\n", name, name );
+
+            # str_nonempty: use as-is, change when-default to "anything empty"
+            } else if ( type_desc == "str_nonempty" ) {
+                when_type = "str_nonempty";
+
+                printf ( "        %s: \"{{ _%s }}\"\n", name, name );
+
+            # passwd: create passwd at runtime and store it as plain text file (UNSAFE)
+            #  plain text file path is: <pwfile_dir>/inventory_hostname/<pwfile_dir>
+            #
+            } else if ( type_desc == "passwd" ) {
+                when_type   = "str_nonempty";
+                pwfile_name = name;
+                sub ( "_(pass(word)|pw)?$", "", pwfile_name );
+
+                printf ( "        %s: \"{{\n", name );
+                printf ( "          lookup(\n" );
+                printf ( "            'password',\n" );
+                printf ( "            '%%s/%%s/%s length=40 chars=ascii_letters,digits' %% (\n", pwfile_name );
+                printf ( "              %s, inventory_hostname\n", pwfile_dir );
+                printf ( "            )\n" );
+                printf ( "          )\n" );
+                printf ( "        }}\"\n" );
+
+
+            } else {
+                # ERROR: unknown type_desc
+                exit 9;
+            }
+
+            # when_type
+            # --------------------------------------------------
+
+            if ( when_type != "always" ) {
+                printf ( "      when: >\n" );
+
+                # no when_type specified: set fact if not defined
+                if ( when_type == "" ) {
+                    printf ( "        (%s is not defined)\n", name );
+
+                # str_nonempty: set fact if not defined or empty
+                } else if ( when_type == "str_nonempty" ) {
+                    printf ( "        (%s | default('') | length < 1)\n", name );
+
+
+                } else {
+                    # ERROR: unknown when_type
+                    exit 8;
+                }
+            }
+
+            # flag_desc
+            # --------------------------------------------------
+
+            # no flag specified: no further restriction on when
+            if ( flag_desc == "" ) {
+                ;
+
+            # negated flag specified: append "and not <flag>" to when clause
+            } else if ( flag_desc ~ "^!" ) {
+                printf ( "        and (not %s)\n", substr ( flag_desc, 2 ) );
+
+            # flag specified: append "and <flag>" to when clause
+            } else {
+                printf ( "        and (%s)\n", flag_desc );
+            }
+
+            # no_log
+            # --------------------------------------------------
+            if ( type_desc == "passwd" ) {
+                printf ( "      no_log: true\n" );
+            }
+        }
+    }
+}

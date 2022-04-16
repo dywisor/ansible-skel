@@ -1,0 +1,26 @@
+#!/bin/sh
+set -fu
+
+dest=""
+if [ $# -gt 0 ]; then
+    dest="${1-}"
+    shift
+fi
+
+if [ -z "${dest}" ]; then
+    dest="${AENV_ANSIBLE_PRJROOT-}"
+
+    if [ -z "${dest}" ]; then
+        printf 'Missing <dest> arg (and no implicit project root found)\n'
+        return 64
+    fi
+fi
+
+dest="$( readlink -f "${dest}" )" && [ -n "${dest}" ] || exit 8
+
+exec ansible-playbook \
+    -i localhost, \
+    -c local \
+    -e prjroot="${dest}" \
+    "${AENV_SKEL_SHAREDIR:?}/playbooks/repo-init.yml" \
+    "${@}"

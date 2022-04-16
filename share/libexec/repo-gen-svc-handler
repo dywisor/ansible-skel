@@ -1,0 +1,26 @@
+#!/bin/sh
+set -fu
+
+name="${1-}"
+
+if [ -z "${name}" ]; then
+    printf 'Bad usage: missing <name>.\n' 1>&2
+    exit 64
+fi
+
+svc_name="${2-}"
+if [ -z "${svc_name}" ]; then
+    svc_name="$(
+        printf '%s' "${name}" | \
+        tr -- '[:upper:]' '[:lower:]' |
+        sed -r \
+            -e 's=[[:space:]]*==' \
+            -e 's=[^a-z0-9_]=_=g'
+    )"
+    [ -n "${svc_name}" ] || exit 8
+fi
+
+sed -r \
+    -e "s=@@SVC_NAME@@=${svc_name}=g" \
+    -e "s=@@NAME@@=${name}=g" \
+    < "${AENV_SKEL_SHAREDIR:?}/files/svc-handler.yml.in"

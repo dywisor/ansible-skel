@@ -1,0 +1,14 @@
+#!/bin/sh
+set -fu
+
+includes_dir="${AENV_ROOT:?}/includes"
+
+exec make \
+    -C "${includes_dir}" \
+    -f "${AENV_SKEL_SHAREDIR:?}/mk/includes.gnu.mk" \
+    \
+    AENV_SKEL_SHAREDIR="${AENV_SKEL_SHAREDIR:?}" \
+    S="${includes_dir}" \
+    O="${includes_dir}" \
+    \
+    "${@}"

@@ -1,0 +1,26 @@
+---
+
+- name: Variables computed at runtime
+  become: false
+  connection: local
+  run_once: true
+  block:
+    - name: set ctrl_local_root - root directory for control node files
+      set_fact:
+        ctrl_local_root: "{{ inventory_dir }}/local"
+      when: ctrl_local_root is not defined
+
+    - name: set ctrl_local_files - files on local control node
+      set_fact:
+        ctrl_local_files: "{{ ctrl_local_root }}/files"
+      when: ctrl_local_files is not defined
+
+    - name: set ctrl_local_tmp - temporary/cached files on local control node
+      set_fact:
+        ctrl_local_tmp: "{{ ctrl_local_root }}/tmp"
+      when: ctrl_local_tmp is not defined
+
+    - name: set ctrl_local_passwd - directory for password generated at runtime - unsafe
+      set_fact:
+        ctrl_local_passwd: "{{ ctrl_local_root }}/passwd"
+      when: ctrl_local_passwd is not defined

@@ -1,0 +1,7 @@
+---
+
+# desc: ansible host ip, defaults to ansible_host
+# type: str_nonempty
+_ansible_host_ip: "{{ ansible_host }}"
+
+...

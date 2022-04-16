@@ -1,0 +1,38 @@
+---
+
+- name: local files/directories on the control node
+  become: false
+  connection: local
+  run_once: true
+  block:
+    - name: create local directories on the control node
+      # force mkdir even in check mode
+      check_mode: false
+      file:
+        state: directory
+        path:  "{{ item.path }}"
+        mode:  "{{ item.mode | default('0755') }}"
+        # omitting owner, group -- use current user
+      loop:
+        - path: "{{ ctrl_local_root }}"
+          mode: "0711"
+        - path: "{{ ctrl_local_files }}"
+        - path: "{{ ctrl_local_tmp }}"
+        - path: "{{ ctrl_local_passwd }}"
+          mode: "0700"
+      loop_control:
+        label: "{{ item.path }}"
+
+
+- name: per-host local files/directories on the control node
+  become: false
+  connection: local
+  block:
+    - name: create per-host local passwd directory on the control node
+      # force mkdir even in check mode
+      check_mode: false
+      file:
+        state: directory
+        path:  "{{ ctrl_local_passwd }}/{{ inventory_hostname }}"
+        mode:  "0700"
+        # omitting owner, group -- use current user
