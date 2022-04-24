@@ -132,12 +132,12 @@ class RunConfig(object):
         'ansible-pull',
         'ansible-test',
         'ansible-vault',
+
+        'env', 'env-diff',
     }
 
     BUILTIN_WRAPPERS_NOINSTALL = {
         'bash', 'dash', 'ksh', 'ash', 'sh',
-
-        'env', 'env-diff',
     }
 
     def __init__(self):
