@@ -1,0 +1,4 @@
+---
+
+- name: run all enqueued handlers
+  meta: flush_handlers
