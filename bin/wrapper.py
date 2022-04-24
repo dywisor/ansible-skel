@@ -470,6 +470,10 @@ def main_init_env_ansible_common(env, root):
             env.pathlike_push(varname, dirpath)
     # --
 
+    # append root directory as low-prio
+    #  (NOTE: reversed order - FIXME MAYBE)
+    env.pathlike_append('ANSIBLE_ROLES_PATH', root)
+
     plugins_dir = root / 'plugins'
     if plugins_dir.is_dir():
         for varname, dirname in [
