@@ -13,13 +13,13 @@ but here are a few choices that I try to adhere to:
   e.g. ``roles/debian``, ``roles/openbsd``.
 
 * For generic roles (Unix/Linux, that is),
-  use subdirectories below ``roles/common/``.
+  use subdirectories below ``roles/generic/``.
 
   This design decision *may* result in having tasks
-  for a specific topic in both ``roles/common/<topic>``
+  for a specific topic in both ``roles/generic/<topic>``
   and ``roles/<os>/<topic>``.
 
-  Having a few *which-os-is-it?* checks below ``roles/common/``
+  Having a few *which-os-is-it?* checks below ``roles/generic/``
   could be OK, but distro-specific blocks should not be put there.
 
 * Put defaults and handlers below ``includes/``,
@@ -31,7 +31,7 @@ but here are a few choices that I try to adhere to:
   ---
 
   dependencies:
-    - includes/common
+    - includes/generic/common
     - includes/debian/common
     - ...
 
