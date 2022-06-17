@@ -46,7 +46,7 @@ END {
         printf ( "- name: set default variables\n" );
         printf ( "  become: false\n" );
         printf ( "  connection: local\n" );
-        printf ( "  run_once: true\n" );
+        printf ( "  run_once: false\n" );
         printf ( "  block:\n" );
        
         for ( i = 1; i <= names_count; i++ ) {
