@@ -66,6 +66,14 @@ but here are a few choices that I try to adhere to:
 
     - ``always``
 
+* Use double quotes for var expansion and single quotes inside
+
+  ```
+  value: "{{ var['key'] }}"
+  ```
+
+* Use ``true``/``false`` for booleans
+
 * Create a metadata.yml file for each topic / role, ``roles/<topic>/metadata.yml``,
   that specifies which other roles must or should be run before/after this role.
 
