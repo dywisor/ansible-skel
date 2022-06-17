@@ -121,6 +121,7 @@ class EnvBuilder(object):
 class RunConfig(object):
 
     BUILTIN_WRAPPERS_INSTALL = {
+        'ansible',
         'ansible-config',
         'ansible-connection',
         'ansible-console',
