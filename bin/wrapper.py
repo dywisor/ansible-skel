@@ -155,6 +155,18 @@ class RunConfig(object):
         self.script_searchpath = None
     # --- end of __init__ (...) ---
 
+    def get_fspath(self, *path_components):
+        # creates a filesystem path using the
+        # "most relevant" project root as search base
+        # (ansible project root first, skel project root as fallback)
+        root = (self.ansible_prjroot or skel_prjroot)
+
+        if path_components:
+            return pathlib.Path(os.path.join(root, *path_components))
+        else:
+            return pathlib.Path(root)
+    # --- end of get_fspath (...) ---
+
     def get_scripts_map(self, *, add_noinstall=False):
         def scan_scripts():
             for script_dir in self.script_searchpath:
@@ -312,7 +324,7 @@ def main(prog, argv):
     env_builder.discard('_')
     env_builder.discard('OLDPWD')
 
-    env_builder['AENV_ROOT'] = (config.ansible_prjroot or config.skel_prjroot)
+    env_builder['AENV_ROOT'] = config.get_fspath()
     env_builder['AENV_SKEL_PRJROOT'] = config.skel_prjroot
     env_builder['AENV_SKEL_SHAREDIR'] = config.skel_sharedir
     env_builder['AENV_ANSIBLE_PRJROOT'] = config.ansible_prjroot
