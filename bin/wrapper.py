@@ -236,7 +236,7 @@ def main(prog, argv):
     # --
 
     # get ansible project root from where we were called
-    # (if not equal not ansible-skel project root)
+    # (if not equal to ansible-skel project root)
     config.ansible_prjroot = config.script_called_dir.parent
     if config.skel_prjroot.samefile(config.ansible_prjroot):
         config.ansible_prjroot = None
