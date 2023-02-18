@@ -5,6 +5,7 @@ import collections
 import os
 import os.path
 import pathlib
+import re
 import shlex
 import sys
 
@@ -141,6 +142,32 @@ class RunConfig(object):
         'bash', 'dash', 'ksh', 'ash', 'sh',
     }
 
+    # wrapped scripts that accept an --inventory option
+    # and should receive the default inventory:
+    #
+    #   <project_root>/inventories/default
+    #
+    # This can either be a directory (= inventory dir)
+    # or a file containing the name of the default inventory,
+    # which will be looked up in
+    #
+    #   <project_root>/inventories/<name>
+    #
+    # Symbolic links will be followed.
+    #
+    # If the constructed inventory path points to a directory,
+    # then a hosts file will be searched within it.
+    # (hosts, hosts.yml, hosts.ini; in that order)
+    #
+    # Note: No --inventory option will be passed
+    #       if no default inventory dir/file was found.
+    #
+    INVENTORY_WRAPPERS = {
+        'ansible',
+        'ansible-inventory',
+        'ansible-playbook',
+    }
+
     def __init__(self):
         self.script_called = None
         self.script_called_dir = None
@@ -154,6 +181,10 @@ class RunConfig(object):
         self.skel_sharedir = None
         self.script_searchpath = None
     # --- end of __init__ (...) ---
+
+    @property
+    def inventory_root(self):
+        return self.get_fspath('inventories')
 
     def get_fspath(self, *path_components):
         # creates a filesystem path using the
@@ -200,11 +231,15 @@ class RunConfig(object):
     # --- end of get_scripts_map (...) ---
 
     def find_script(self, wrapped_name):
+        # returns 3-tuple (needs PATH lookup, wants inventory, prog name or path)
+
+        wants_inventory = bool(wrapped_name in self.INVENTORY_WRAPPERS)
+
         for search_dir in self.script_searchpath:
             wrapped_script = search_dir / wrapped_name
 
             if wrapped_script.is_file():
-                return (False, wrapped_script)
+                return (False, wants_inventory, wrapped_script)
         # --
 
         # builtins after script search
@@ -213,11 +248,43 @@ class RunConfig(object):
             self.BUILTIN_WRAPPERS_NOINSTALL,
         ]:
             if wrapped_name in builtin_wrappers:
-                return (True, wrapped_name)
+                return (True, wants_inventory, wrapped_name)
         # --
 
-        return (None, None)
+        return (None, None, None)
     # --- end of find_script (...) ---
+
+    def find_default_inventory(self):
+        inventory_root = self.inventory_root
+
+        default_inventory_base = inventory_root / 'default'
+
+        if os.path.isfile(default_inventory_base):
+            with open(default_inventory_base, 'rt') as fh:
+                default_inventory_name = fh.readline().strip()
+            # -- end with
+
+            if (
+                default_inventory_name
+                and re.match(r'^[a-zA-Z0-9_\-]+$', default_inventory_name)
+            ):
+                default_inventory_base = inventory_root / default_inventory_name
+            # -- end if
+        # -- end if resolve file containing default inventory name
+
+        if not os.path.isdir(default_inventory_base):
+            return None
+        # --
+
+        for filename in ['hosts', 'hosts.yml', 'hosts.ini']:
+            default_inventory = (default_inventory_base / filename)
+
+            if default_inventory.is_file():
+                return default_inventory
+        # --
+
+        return None
+    # --- end of find_default_inventory (...) ---
 
 # --- end of RunConfig ---
 
@@ -310,7 +377,11 @@ def main(prog, argv):
         # --
     # --
 
-    (wrapped_path_lookup, wrapped_script) = config.find_script(wrapped_name)
+    (
+        wrapped_path_lookup,
+        wrapped_wants_inventory,
+        wrapped_script
+    ) = config.find_script(wrapped_name)
 
     if not wrapped_script:
         sys.stderr.write(f'Failed to locate script: {wrapped_name}\n')
@@ -349,7 +420,28 @@ def main(prog, argv):
     # --
 
     env  = env_builder.build_env()
-    cmdv = [wrapped_script] + argv
+    cmdv = [wrapped_script]
+
+    if wrapped_wants_inventory:
+        # quick check whether another inventory option was given on the cmdline
+        #  NOTE: option bundling is not implemented
+        #        and argv is not parsed properly
+        #        (--inventory could be an option or an argument/option value)
+        has_inventory_opt = False
+        for arg in argv:
+            if arg.split('=', 1)[0] in {'-i', '--inventory', '--inventory-file'}:
+                has_inventory_opt = True
+                break  # BREAK-LOOP argv
+        # --
+
+        if not has_inventory_opt:
+            inventory_file = config.find_default_inventory()
+            if inventory_file:
+                cmdv.extend(['-i', str(inventory_file)])
+        # --
+    # --
+
+    cmdv.extend(argv)
 
     if wrapped_path_lookup:
         # could also be a code builtin
