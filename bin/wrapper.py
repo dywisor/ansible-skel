@@ -190,7 +190,7 @@ class RunConfig(object):
         # creates a filesystem path using the
         # "most relevant" project root as search base
         # (ansible project root first, skel project root as fallback)
-        root = (self.ansible_prjroot or skel_prjroot)
+        root = (self.ansible_prjroot or self.skel_prjroot)
 
         if path_components:
             return pathlib.Path(os.path.join(root, *path_components))
