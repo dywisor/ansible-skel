@@ -154,7 +154,7 @@ def aenv_items_diff(
     keys_ignore=None, keys_regexp_ignore=None
 ):
     """Given two item collections left and right,
-    this filter functions determines which items
+    this filter function determines which items
     appear in both of them or just either one.
 
     Comparison may be controlled by specifying
@@ -182,7 +182,7 @@ def aenv_items_diff(
     Note: This function is not suitable for complex dict comparisions.
           One could, for instance, compare create-user objects by key 'name',
           but that doesn't verify whether options such as 'can-login' differ.
-          See aenv_dict_diff() for an extendend variant that offers this functionality.
+          See aenv_dict_diff() for an extended variant that offers this functionality.
 
     @param   left:      collection of items (left hand side)
     @type    left:      iterable|genexpr of C{object}
@@ -253,7 +253,7 @@ def aenv_dict_diff(left, right, *, cmp_key=None, cmp_lkey=None, cmp_rkey=None, *
     Use cases include:
       - user management: Compare wanted user entries ("left")
                          against current configuration ("right")
-                         while ignore some builtin names
+                         while ignoring some builtin names
                          ("keys_ignore" or "keys_regexp_ignore").
                          One would then proceed to drop users
                          listed in "only_right" and reconfigure
