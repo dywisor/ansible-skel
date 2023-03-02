@@ -1,6 +1,13 @@
 #!/bin/sh
 set -fu
 
+case "${1-}" in
+    '-h'|'--help')
+        printf 'Usage: repo-init [<dest>]\n'
+        exit 0
+    ;;
+esac
+
 dest=""
 if [ $# -gt 0 ]; then
     dest="${1-}"
