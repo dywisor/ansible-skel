@@ -25,7 +25,7 @@ but here are a few choices that I try to adhere to:
 * Put defaults and handlers below ``includes/``,
   organized in a per-topic structure, e.g. ``debian/common``, ``debian/nginx``
 
-  Those are loaded in rules in ``<role>/meta/main.yml``:
+  Those are loaded in roles via ``<role>/meta/main.yml``:
 
   ```
   ---
