@@ -1,6 +1,13 @@
 #!/bin/sh
 set -fu
 
+case "${1-}" in
+    '-h'|'--help')
+        printf 'Usage: repo-update-includes\n'
+        exit 0
+    ;;
+esac
+
 includes_dir="${AENV_ROOT:?}/includes"
 
 exec make \
