@@ -1,6 +1,13 @@
 #!/bin/sh
 set -fu
 
+case "${1-}" in
+    '-h'|'--help')
+        printf 'Usage: repo-find-roles\n'
+        exit 0
+    ;;
+esac
+
 cd "${AENV_ROOT:?}/roles" || exit 8
 
 # assuming that there's no role named 'tasks'
