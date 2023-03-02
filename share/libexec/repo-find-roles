@@ -11,4 +11,4 @@ esac
 cd "${AENV_ROOT:?}/roles" || exit 8
 
 # assuming that there's no role named 'tasks'
-find . -type d -mindepth 2 -name tasks | sed -r -e 's=^[.]/==' -e 's=/tasks$==' | sort
+find . -mindepth 2 -type d -name tasks | sed -r -e 's=^[.]/==' -e 's=/tasks$==' | sort
