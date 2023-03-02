@@ -1,6 +1,13 @@
 #!/bin/sh
 set -fu
 
+case "${1-}" in
+    '-h'|'--help')
+        printf 'Usage: repo-gen-svc-handler <name> [<svc_name>]\n'
+        exit 0
+    ;;
+esac
+
 name="${1-}"
 
 if [ -z "${name}" ]; then
