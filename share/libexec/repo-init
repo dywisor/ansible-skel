@@ -16,7 +16,7 @@ if [ -z "${dest}" ]; then
     fi
 fi
 
-dest="$( readlink -f "${dest}" )" && [ -n "${dest}" ] || exit 8
+dest="$( readlink -f -- "${dest}" )" && [ -n "${dest}" ] || exit 8
 
 exec ansible-playbook \
     -i localhost, \
