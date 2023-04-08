@@ -163,9 +163,13 @@ class RunConfig(object):
     #       if no default inventory dir/file was found.
     #
     INVENTORY_WRAPPERS = {
+        # ansible
         'ansible',
         'ansible-inventory',
         'ansible-playbook',
+
+        # helper scripts
+        'repo-inventory',
     }
 
     def __init__(self):

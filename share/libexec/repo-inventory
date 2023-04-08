@@ -1,0 +1,704 @@
+#!/usr/bin/python3
+# -*- coding: utf-8 -*-
+#
+# Inventory vars include helper
+#
+# Basic script modes:
+# -l, --list-repo:      list includes available in skel / root / repo(s)
+# -L, --list-inventory: list includes in inventory
+# -u, --update:         add new auto-enabled includes
+#
+
+from __future__ import annotations
+
+import abc
+import argparse
+import collections
+import functools
+import os
+import os.path
+import pathlib
+import sys
+import shlex
+
+from dataclasses import dataclass, field
+from typing import Optional
+
+
+@dataclass
+class RuntimeConfig:
+    aenv_skel_prjroot       : pathlib.Path
+    aenv_root               : pathlib.Path
+    inventory_root          : Optional[pathlib.Path] = field(default=None)
+    repo_includes_map       : Optional[dict] = field(default=None)
+    inventory_includes_map  : Optional[dict] = field(default=None)
+# --- end of RuntimeConfig ---
+
+
+@dataclass
+class InventoryIncludesInfo:
+    default_enable  : bool
+# --- end of InventoryIncludesInfo ---
+
+
+@dataclass
+class InventoryIncludesFile:
+    source          : str
+    category        : str
+    entity          : str
+    name            : str
+    path            : str
+    link_target     : Optional[str] = field(default=None)
+    info            : Optional[InventoryIncludesInfo] = field(default=None)
+
+    @property
+    def qname(self):
+        return '/'.join([
+            self.category,
+            self.entity,
+            self.name,
+        ])
+    # --- end of property qname ---
+
+# --- end of InventoryIncludesFile ---
+
+
+@dataclass
+class WalkInventoryIncludesItem:
+    inventory_vars      : Optional[InventoryIncludesFile]
+    repo_vars           : Optional[InventoryIncludesFile]
+    inventory_dir       : str
+    repo_link_target    : Optional[str]
+# --- end of WalkInventoryIncludesItem ---
+
+
+class AbstractInventoryIncludesScanner(object, metaclass=abc.ABCMeta):
+
+    def __init__(self, config):
+        super().__init__()
+        self.config = config
+    # --- end of __init__ (...) ---
+
+    def scan(self):
+        def nested_map_insert(d, key_path, value, *, dict_type=dict):
+            node = d
+            for key in key_path[:-1]:
+                try:
+                    next_node = node[key]
+                except KeyError:
+                    next_node = dict_type()
+                    node[key] = next_node
+                # --
+
+                node = next_node
+            # --
+
+            node[key_path[-1]] = value
+        # --- end of nested_map_insert (...) ---
+
+        # phase 1: collect includes (later search roots override earlier ones)
+        repo_includes_map = {}
+
+        for source, includes_root in self.isearch_includes():
+            for includes_file in self.iscan_includes_root(source, includes_root):
+                nested_map_insert(
+                    repo_includes_map,
+                    [includes_file.category, includes_file.entity, includes_file.name],
+                    includes_file
+                )
+            # --
+        # --
+
+        # phase 2: read includes info
+        for category_name, category in repo_includes_map.items():
+            for entity_name, entity in category.items():
+                for includes_file in entity.values():
+                    includes_file.info = self.read_includes_file_info(includes_file.path)
+                # --
+            # --
+        # --
+
+        # ... and done
+        return repo_includes_map
+    # --- end of scan (...) ---
+
+    @abc.abstractmethod
+    def isearch_includes(self):
+        raise NotImplementedError(self)
+    # --- end of isearch_includes (...) ---
+
+    def iscan_includes_root(self, source, root_dirpath):
+        # includes root structure:
+        #
+        # <root>
+        #   |- group_vars           # category, always a directory
+        #      |- <GROUP>           # (host/group) entity, always a directory
+        #         |- <GROUP_VARS>   # name, file w/ .yml suffix (may be a symlink)
+        #
+        #
+
+        for category in ['group_vars']:
+            entity_vars_root = (root_dirpath / category)
+
+            if entity_vars_root.is_symlink():
+                pass    # ignored
+
+            elif entity_vars_root.is_dir():
+                yield from self.iscan_includes_dir(
+                    source, category, entity_vars_root
+                )
+        # --
+    # --- end of iscan_includes_root (...) ---
+
+    def iscan_includes_dir(self, source, category, entity_vars_root):
+        # only consider files at depth 2
+        # (see iscan_includes_root() for directory structure)
+
+        for entity_dir in entity_vars_root.iterdir():
+            if entity_dir.is_symlink():
+                pass    # ignored
+
+            elif entity_dir.is_dir():
+                entity_name = entity_dir.name
+
+                for entity_vars_file in entity_dir.iterdir():
+                    if (
+                        entity_vars_file.is_file()
+                        and entity_vars_file.suffix == '.yml'
+                    ):
+                        if entity_vars_file.is_symlink():
+                            link_target = entity_vars_file.readlink()
+                        else:
+                            link_target = None
+                        # --
+
+                        yield InventoryIncludesFile(
+                            source      = source,
+                            category    = category,
+                            entity      = entity_name,
+                            name        = entity_vars_file.name,
+                            path        = entity_vars_file,
+                            link_target = link_target,
+                        )
+                    # -- end if
+                # -- end for <file> in <dir>
+            # -- end if
+        # -- end for <dir>
+    # --- end of iscan_includes_dir (...) ---
+
+    def read_includes_file_info(self, filepath):
+        def iread_file(filepath):
+            with open(filepath, 'rt') as fh:
+                for line in fh:
+                    sline = line.strip()
+
+                    if not sline:
+                        pass
+
+                    elif sline[0] == '#':
+                        sline_rem = sline[1:].lstrip()
+
+                        # "aenv:" [<space>] <keyword> [":" [<space>] <value>]
+                        fields = [w.strip() for w in sline_rem.split(':', 2)]
+                        if len(fields) > 1 and fields[0] == 'aenv':
+                            kw = fields[1]
+
+                            if kw:
+                                value = (fields[2] if len(fields) > 2 else None)
+
+                                if kw[:3] == 'no_':
+                                    yield (kw[3:], False, value)
+
+                                else:
+                                    yield (kw, True, value)
+                                # --
+                            # --
+                        # --
+
+                    else:
+                        break   # BREAK-READ-FILE on first non-comment line
+                # -- end for
+            # -- end with
+        # --- end of iread_file (...) ---
+
+        file_info = InventoryIncludesInfo(
+            default_enable = None,
+        )
+
+        for kw, kw_bool, value in iread_file(filepath):
+            if kw == 'include':
+                if value is not None:
+                    raise ValueError('dummy kw does not accept value', filepath, kw)
+
+                elif kw_value is False:
+                    raise ValueError('dummy kw may not be negated', filepath, kw)
+
+            elif kw == 'default_enable':
+                if value is not None:
+                    raise ValueError('kw does not accept value', filepath, kw)
+
+                file_info.default_enable = kw_bool
+
+            else:
+                raise ValueError('unknown keyword', filepath)
+        # -- end for
+
+        return file_info
+    # --- end of read_includes_file_info (...) ---
+
+# --- end of AbstractInventoryIncludesScanner ---
+
+
+class InventoryIncludesRepoScanner(AbstractInventoryIncludesScanner):
+
+    def gen_search_roots(self):
+        yield ('skel', self.config.aenv_skel_prjroot)
+
+        if self.config.aenv_skel_prjroot != self.config.aenv_root:
+            yield ('root', self.config.aenv_root)
+        # --
+
+        custom_collections_dir = self.config.aenv_root / 'dust'
+        if custom_collections_dir.is_dir():
+            for ent in custom_collections_dir.iterdir():
+                if ent.is_dir():
+                    yield (f'dust/{ent.name}', ent)
+        # --
+    # --- end of gen_search_roots (...) ---
+
+    def isearch_includes(self):
+        for source, search_root in self.gen_search_roots():
+            includes_root = search_root / 'inventories' / 'includes'
+
+            if includes_root.is_dir():
+                yield (source, includes_root)
+        # --
+    # --- end of isearch_includes (...) ---
+
+# --- end of InventoryIncludesRepoScanner ---
+
+
+class InventoryIncludesScanner(AbstractInventoryIncludesScanner):
+
+    def isearch_includes(self):
+        inventory_root = self.config.inventory_root
+
+        if inventory_root.is_dir():
+            yield ('inventory', inventory_root)
+    # --- end of isearch_includes (...) ---
+
+# --- end of InventoryIncludesScanner ---
+
+
+
+def get_argument_parser(prog):
+    arg_parser = argparse.ArgumentParser(
+        prog=os.path.basename(prog),
+    )
+
+    arg_parser.add_argument(
+        '-i', '--inventory', '--inventory-file',
+        metavar='<inventory>',
+        dest='inventory',
+        help='inventory host path'
+    )
+
+    arg_parser.add_argument(
+        '-f', '--force',
+        dest='force',
+        default=False, action='store_true',
+        help=(
+            'enable update force mode:\n'
+            'replace existing symlinks (but not regular files)'
+        )
+    )
+
+    arg_parser.add_argument(
+        '-n', '--dry-run',
+        dest='dry_run',
+        default=False, action='store_true',
+        help='just show what would be done'
+    )
+
+    arg_parser.add_argument(
+        '-u', '--update',
+        dest='script_mode', action='store_const',
+        default='update',
+        const='update',
+        help='update inventory includes (default mode)'
+    )
+
+    arg_parser.add_argument(
+        '-l', '--list-repo',
+        dest='script_mode', action='store_const',
+        default=argparse.SUPPRESS,
+        const='list_repo',
+        help='list includes repo'
+    )
+
+    arg_parser.add_argument(
+        '-L', '--list-inventory',
+        dest='script_mode', action='store_const',
+        default=argparse.SUPPRESS,
+        const='list_inventory',
+        help='list inventory includes'
+    )
+
+    return arg_parser
+# --- end of get_argument_parser (...) ---
+
+
+def main(prog, argv):
+    arg_parser = get_argument_parser(prog)
+    arg_config = arg_parser.parse_args(argv)
+
+    config = RuntimeConfig(
+        aenv_skel_prjroot = pathlib.Path(os.environ['AENV_SKEL_PRJROOT']),
+        aenv_root         = pathlib.Path(os.environ['AENV_ROOT']),
+    )
+
+    config.repo_includes_map = InventoryIncludesRepoScanner(config).scan()
+
+    if arg_config.inventory:
+        inventory_root = pathlib.Path(arg_config.inventory)
+        if inventory_root.is_file():
+            # use directory containing the inventory file
+            inventory_root = inventory_root.parent
+        # --
+
+        config.inventory_root = inventory_root
+
+        config.inventory_includes_map = InventoryIncludesScanner(config).scan()
+
+    else:
+        config.inventory_root = None
+        config.inventory_includes_map = {}
+    # --
+
+    if arg_config.script_mode == 'list_repo':
+        return main_list_repo(config, arg_config)
+
+    elif arg_config.script_mode == 'list_inventory':
+        if config.inventory_root:
+            return main_list_inventory(config, arg_config)
+        else:
+            sys.stderr.write('No inventory root found.\n')
+            return False
+        # --
+
+    elif arg_config.script_mode == 'update':
+        if config.inventory_root:
+            return main_update(config, arg_config)
+        else:
+            sys.stderr.write('No inventory root found.\n')
+            return False
+        # --
+
+    else:
+        raise NotImplementedError(arg_config.script_mode)
+# --- end of main (...) ---
+
+
+def flag_str(arg, *, val_true='+', val_false='-', val_other='?'):
+    if arg is True:
+        return val_true
+    elif arg is False:
+        return val_false
+    else:
+        return val_other
+# --- end of flag_str (...) ---
+
+
+def walk_compare_dict(root_a, root_b, *, only_left=False):
+    def walk_compare_dict_resursive_all(da, db):
+        keys_all = set(da) | set(db)
+
+        for key in sorted(keys_all):
+            try:
+                a = da[key]
+            except KeyError:
+                a = None
+
+            try:
+                b = db[key]
+            except KeyError:
+                b = None
+            # --
+
+            if isinstance(a, dict):
+                if b is None:
+                    yield from walk_compare_dict_resursive_only_left(a, {})
+
+                elif isinstance(b, dict):
+                    yield from walk_compare_dict_resursive_all(a, b)
+
+                else:
+                    raise TypeError(da, db)
+
+            elif isinstance(b, dict):
+                if a is None:
+                    for rev_b, rev_a in walk_compare_dict_resursive_only_left(b, {}):
+                        yield (rev_a, rev_b)
+
+                else:
+                    raise TypeError(da, db)
+
+            else:
+                yield (a, b)
+        # -- end for
+    # --- end of walk_compare_dict_resursive_all (...) ---
+
+    def walk_compare_dict_resursive_only_left(da, db):
+        for key in sorted(da):
+            a = da[key]
+
+            try:
+                b = db[key]
+            except KeyError:
+                b = None
+            # --
+
+            if isinstance(a, dict):
+                if b is None:
+                    yield from walk_compare_dict_resursive_only_left(a, {})
+
+                elif isinstance(b, dict):
+                    yield from walk_compare_dict_resursive_only_left(a, b)
+
+                else:
+                    raise TypeError(da, db)
+
+            elif isinstance(b, dict):
+                if a is None:
+                    for rev_b, rev_a in walk_compare_dict_resursive_only_left(b, {}):
+                        yield (rev_a, rev_b)
+
+                else:
+                    raise TypeError(da, db)
+
+            else:
+                yield (a, b)
+        # -- end for
+    # --- end of walk_compare_dict_resursive_all (...) ---
+
+    if only_left:
+        yield from walk_compare_dict_resursive_only_left(root_a, root_b)
+    else:
+        yield from walk_compare_dict_resursive_all(root_a, root_b)
+# --- end of walk_compare_dict (...) ---
+
+
+def walk_inventory_includes(config, *, only_inventory=False):
+    @functools.lru_cache(maxsize=128)
+    def get_inventory_dir(inventory_root, category, entity):
+        return (inventory_root / category / entity)
+    # ---
+
+    inventory_root = config.inventory_root
+
+    if not inventory_root:
+        return
+    # --
+
+    for inventory_vars, repo_vars in walk_compare_dict(
+        config.inventory_includes_map,
+        config.repo_includes_map,
+        only_left=only_inventory
+    ):
+        if inventory_vars is not None:
+            inventory_dir = inventory_vars.path.parent
+        else:
+            inventory_dir = get_inventory_dir(inventory_root, repo_vars.category, repo_vars.entity)
+        # --
+
+        if repo_vars is not None:
+            # https://docs.python.org/3.11/library/pathlib.html:
+            # """
+            # PurePath.relative_to() requires self to be the subpath
+            # of the argument, but os.path.relpath() does not.
+            # """
+            repo_link_target = pathlib.Path(
+                os.path.relpath(repo_vars.path, start=inventory_dir)
+            )
+
+        else:
+            repo_link_target = None
+        # --
+
+        yield WalkInventoryIncludesItem(
+            inventory_vars      = inventory_vars,
+            repo_vars           = repo_vars,
+            inventory_dir       = inventory_dir,
+            repo_link_target    = repo_link_target,
+        )
+# --- end of walk_inventory_includes (...) ---
+
+
+def walk_repo_includes(config):
+    # FIXME: lazy implementation
+    # nested dict walk would be sufficient here, no comparison needed
+    for repo_vars, dummy in walk_compare_dict(
+        config.repo_includes_map,
+        {},
+        only_left=True
+    ):
+        yield repo_vars
+    # --
+# --- end of walk_repo_includes (...) ---
+
+
+def main_list_repo(config, arg_config):
+    for repo_vars in walk_repo_includes(config):
+        sys.stdout.write(
+            '{flag_ena} {qname:<50} [@{source}]\n'.format(
+                flag_ena    = flag_str(repo_vars.info.default_enable),
+                qname       = repo_vars.qname,
+                source      = repo_vars.source,
+            )
+        )
+    # -- end for
+# --- end of main_list_repo (...) ---
+
+
+def main_list_inventory(config, arg_config):
+    for item in walk_inventory_includes(config, only_inventory=True):
+        sys.stdout.write(
+            '{flag_link} {qname:<50} [{source}]\n'.format(
+                flag_link   = ('L' if item.inventory_vars.link_target else 'F'),
+                qname       = item.inventory_vars.qname,
+                source      = (
+                    '' if not item.inventory_vars.link_target else (
+                        f'@{item.repo_vars.source}' if (
+                            item.repo_vars is not None
+                            and item.inventory_vars.link_target == item.repo_link_target
+                        ) else f'{item.inventory_vars.link_target}'
+                    )
+                )
+            )
+        )
+    # -- end for
+# --- end of main_list_inventory (...) ---
+
+
+def main_update(config, arg_config):
+    force_mode    = arg_config.force
+
+    # opstack_dodir: directories to create if missing
+    # opstack_dodir: symlinks to create/replace
+    opstack_dodir = collections.OrderedDict()   # <dir> => True
+    opstack_dosym = []                          # <item>, <link_target>, <link>, <force>
+
+    for item in walk_inventory_includes(config, only_inventory=False):
+        if item.repo_vars is None:
+            pass    # ignored: no repo file available
+
+        elif item.repo_vars.info.default_enable:
+            if item.inventory_vars is None:
+                opstack_dodir[item.inventory_dir] = True
+                opstack_dosym.append(
+                    (
+                        item,
+                        item.repo_link_target,
+                        (item.inventory_dir / item.repo_vars.path.name),
+                        False
+                    )
+                )
+
+            elif (
+                force_mode
+                and item.inventory_vars.link_target is not None
+                and item.inventory_vars.link_target != item.repo_link_target
+            ):
+                # dodir not needed
+                opstack_dosym.append(
+                    (
+                        item,
+                        item.repo_link_target,
+                        (item.inventory_dir / item.repo_vars.path.name),
+                        True
+                    )
+                )
+            # -- end if
+        # -- end if
+    # -- end for
+
+    if arg_config.dry_run:
+        sys.stdout.write('(\n  set -fe;\n\n')
+
+        for dirpath in opstack_dodir:
+            sys.stdout.write('  mkdir -p -- {d}\n'.format(d=shlex.quote(str(dirpath))))
+
+        if opstack_dodir:
+            sys.stdout.write('\n')
+
+        for item, link_target, link, link_force in opstack_dosym:
+            if link_force:
+                sys.stdout.write('  rm -f -- {l}\n'.format(l=shlex.quote(str(link))))
+            # --
+
+            sys.stdout.write(
+                '  ln -s -- {t} {l}\n'.format(
+                    t=shlex.quote(str(link_target)),
+                    l=shlex.quote(str(link)),
+                )
+            )
+        # --
+
+        sys.stdout.write(')\n')
+
+    else:
+        for dirpath in opstack_dodir:
+            dirpath.mkdir(parents=True, exist_ok=True)
+        # --
+
+        for item, link_target, link, link_force in opstack_dosym:
+            sys.stdout.write(
+                '{flag_ena} {qname:<50} [@{source}]\n'.format(
+                    flag_ena    = flag_str(item.repo_vars.info.default_enable),
+                    qname       = item.repo_vars.qname,
+                    source      = item.repo_vars.source,
+                )
+            )
+
+            if link_force:
+                link.unlink()
+
+            link.symlink_to(link_target)
+        # -- end for
+
+    # -- end if dry-run / action?
+# --- of main_update (...) ---
+
+
+def run_main():
+    os_ex_ok = getattr(os, 'EX_OK', 0)
+
+    try:
+        exit_code = main(sys.argv[0], sys.argv[1:])
+
+    except BrokenPipeError:
+        for fh in [sys.stdout, sys.stderr]:
+            try:
+                fh.close()
+            except:
+                pass
+
+        exit_code = os_ex_ok ^ 11
+
+    except KeyboardInterrupt:
+        exit_code = os_ex_ok ^ 130
+
+    else:
+        if (exit_code is None) or (exit_code is True):
+            exit_code = os_ex_ok
+
+        elif exit_code is False:
+            exit_code = os_ex_ok ^ 1
+    # --
+
+    sys.exit(exit_code)
+# --- end of run_main (...) ---
+
+
+if __name__ == '__main__':
+    run_main()
