@@ -1,3 +1,4 @@
+# aenv: default_enable
 ---
 # NOTE: brackets are not used for IPv6 addresses in NO_PROXY
 # (see https://github.com/curl/curl/issues/2353)

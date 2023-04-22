@@ -1,3 +1,4 @@
+# aenv: no_default_enable
 ---
 # Defines environment vars for using a web proxy
 # passed via SSH reverse forwarding.
