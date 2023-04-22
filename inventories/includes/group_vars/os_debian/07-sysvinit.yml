@@ -1,7 +1,0 @@
----
-
-# Cannot simulate service start/stop/restart/...  in check mode
-# when using SysVinit and the service file is not installed.
-debian_can_handle_service: "{{ not ansible_check_mode }}"
-
-...
